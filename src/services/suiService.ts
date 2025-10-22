@@ -42,7 +42,8 @@ export const createDidForUser = async (userAddress: string) => {
 /**
  * Issues a Verifiable Credential from the server's issuer DID to a recipient address.
  */
-export const issueKycVc = async (recipientAddress: string, firstName: string, lastName: string, dob: string) => {
+export const issueKycVc = async (recipientAddress: string, firstName: string, lastName: string, dob: string, nationalId: string, address: string) => {
+    console.log('issueKycVc called with:', { recipientAddress, firstName, lastName, dob, nationalId, address });
     console.log(`Issuing KYC VC for ${recipientAddress}`);
     
     // First, verify that the schema exists
@@ -62,13 +63,18 @@ export const issueKycVc = async (recipientAddress: string, firstName: string, la
     // In a real system, the proof would be a cryptographic signature
     const fakeProofBytes = Array.from(Buffer.from("signature_would_go_here", 'utf8'));
 
-    // Prepare the credential data - convert to byte arrays
-    const fieldNames = ['firstName', 'lastName', 'dateOfBirth'];
-    const fieldValues = [
-        Array.from(Buffer.from(firstName, 'utf8')),
-        Array.from(Buffer.from(lastName, 'utf8')),
-        Array.from(Buffer.from(dob, 'utf8'))
-    ];
+    // Debug log: print the fields and values being sent to the Move contract
+    console.log('Preparing to issue VC with the following arguments:');
+    console.log('  issuer_did (shared object ref):', ISSUER_DID_OBJECT_ID, typeof ISSUER_DID_OBJECT_ID);
+    console.log('  schema (shared object ref):', schemaId, typeof schemaId);
+    console.log('  recipient_address:', recipientAddress, typeof recipientAddress);
+    console.log('  first_name:', firstName, typeof firstName);
+    console.log('  last_name:', lastName, typeof lastName);
+    console.log('  date_of_birth:', dob, typeof dob);
+    console.log('  national_id:', nationalId, typeof nationalId);
+    console.log('  address:', address, typeof address);
+    console.log('  proof (vector<u8>):', fakeProofBytes, Array.isArray(fakeProofBytes) ? 'array' : typeof fakeProofBytes);
+    console.log('  clock (shared object ref):', '0x6', typeof '0x6');
 
     txb.moveCall({
         target: `${SUI_PACKAGE_ID}::vc_manager::issue_vc`,
@@ -76,8 +82,11 @@ export const issueKycVc = async (recipientAddress: string, firstName: string, la
             txb.object(ISSUER_DID_OBJECT_ID),
             txb.object(schemaId),
             txb.pure(recipientAddress, 'address'),
-            txb.pure(fieldNames, 'vector<string>'),
-            txb.pure(fieldValues, 'vector<vector<u8>>'),
+            txb.pure(firstName, 'string'),
+            txb.pure(lastName, 'string'),
+            txb.pure(dob, 'string'),
+            txb.pure(nationalId, 'string'),
+            txb.pure(address, 'string'),
             txb.pure(fakeProofBytes, 'vector<u8>'),
             txb.object('0x6'), // Clock object ID (system clock)
         ],
@@ -116,7 +125,7 @@ export const createKycSchema = async () => {
     const txb = new TransactionBlock();
     
     const schemaName = "KYC_Credential";
-    const requiredFields = ['firstName', 'lastName', 'dateOfBirth'];
+    const requiredFields = ['firstName', 'lastName', 'dateOfBirth', 'nationalId', 'address'];
     
     txb.moveCall({
         target: `${SUI_PACKAGE_ID}::vc_manager::create_schema`,

@@ -31,25 +31,45 @@ export const registerUser = async (req: Request, res: Response) => {
 // @desc   Issue a KYC credential to a registered user
 // @route  POST /api/users/issue-kyc
 export const issueKycCredential = async (req: Request, res: Response) => {
-    const { suiAddress, firstName, lastName, dateOfBirth } = req.body;
-    if (!suiAddress || !firstName || !lastName || !dateOfBirth) {
-        return res.status(400).json({ message: 'suiAddress, firstName, lastName, and dateOfBirth are required' });
+    console.log('issueKycCredential controller called');
+    console.log('Request body:', req.body);
+    const { suiAddress, firstName, lastName, dateOfBirth, nationalId, address } = req.body;
+    if (!suiAddress || !firstName || !lastName || !dateOfBirth || !nationalId || !address) {
+        console.log('Missing required fields:', { suiAddress, firstName, lastName, dateOfBirth, nationalId, address });
+        return res.status(400).json({ message: 'suiAddress, firstName, lastName, dateOfBirth, nationalId, and address are required' });
     }
-
     try {
         const user = await User.findOne({ suiAddress });
         if (!user) {
+            console.log('User not found:', suiAddress);
             return res.status(404).json({ message: 'User not found with this Sui address' });
         }
+        const result = await issueKycVc(suiAddress, firstName, lastName, dateOfBirth, nationalId, address);
 
-        const result = await issueKycVc(suiAddress, firstName, lastName, dateOfBirth);
+        // Store credential in database
+        const fullName = `${firstName} ${lastName}`;
+        const credentialData = { fullName, dateOfBirth, nationalId, address };
+        const credential = await Credential.create({
+            userAddress: suiAddress,
+            credentialData,
+            suiVcId: result.vcObjectId,
+            transactionDigest: result.transactionDigest
+        });
 
-        res.status(200).json({
-            message: 'KYC Credential issued successfully!',
-            ...result
+        // Format credential response
+        const credentialObj = credential.toJSON();
+        const formattedCredential = {
+            ...credentialObj,
+            id: credentialObj._id || credentialObj.id
+        };
+
+        res.status(201).json({
+            message: 'KYC Credential issued and saved successfully!',
+            ...result,
+            credential: formattedCredential
         });
     } catch (error: any) {
-        console.error("Error issuing KYC VC:", error);
+        console.error('Error in issueKycCredential:', error);
         res.status(500).json({ message: 'Server error during VC issuance', error: error.message });
     }
 };
@@ -138,6 +158,7 @@ export const getUserCredentials = async (req: Request, res: Response) => {
 // @desc   Create a new credential
 // @route  POST /api/users/credentials
 export const createCredential = async (req: Request, res: Response) => {
+    console.log('createCredential controller called with body:', req.body);
     const { userAddress, credentialData } = req.body;
 
     if (!userAddress || !credentialData) {
@@ -161,8 +182,7 @@ export const createCredential = async (req: Request, res: Response) => {
         // Issue VC on Sui blockchain
         const [firstName, ...lastNameParts] = fullName.split(' ');
         const lastName = lastNameParts.join(' ') || '';
-        
-        const vcResult = await issueKycVc(userAddress, firstName, lastName, dateOfBirth);
+        const vcResult = await issueKycVc(userAddress, firstName, lastName, dateOfBirth, nationalId, address);
 
         // Store credential in database
         const credential = await Credential.create({

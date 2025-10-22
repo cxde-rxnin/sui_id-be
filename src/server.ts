@@ -1,8 +1,10 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDB from './config/db';
 import userRoutes from './routes/userRoutes';
+
+console.log('--- Backend server file loaded and running ---');
 
 // Load environment variables
 dotenv.config();
@@ -29,12 +31,24 @@ app.use(cors({
 // Middleware to parse JSON bodies
 app.use(express.json());
 
+// Log every incoming request for debugging
+app.use((req, res, next) => {
+    console.log(`[REQUEST] ${req.method} ${req.originalUrl}`);
+    next();
+});
+
 // --- API Routes ---
 app.use('/api/users', userRoutes);
 
 // --- Health Check Route ---
 app.get('/', (req, res) => {
     res.send('Identity Backend API is running...');
+});
+
+// Global error handler to catch and log all errors
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    console.error('[GLOBAL ERROR HANDLER]', err);
+    res.status(500).json({ message: 'Internal server error', error: err.message });
 });
 
 const PORT = process.env.PORT || 8080;
